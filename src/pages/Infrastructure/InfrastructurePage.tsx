@@ -1,208 +1,215 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
-import Typography from '@mui/material/Typography';
-import Tabs from '@mui/material/Tabs';
-import Tab from '@mui/material/Tab';
 import Chip from '@mui/material/Chip';
-import Skeleton from '@mui/material/Skeleton';
+import Grid from '@mui/material/Grid2';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
+import Divider from '@mui/material/Divider';
 import { alpha, useTheme } from '@mui/material/styles';
 
-import PageHeader from '../../components/common/PageHeader';
-
 import DnsRoundedIcon from '@mui/icons-material/DnsRounded';
+import PageHeader from '../../components/common/PageHeader';
+import LoadingState from '../../components/common/LoadingState';
+import ErrorState from '../../components/common/ErrorState';
+import { useInfrastructureOverview } from '../../hooks/useInfrastructureData';
 
-/* ─── Column definitions per tab ─── */
-interface ColumnDef {
-  label: string;
-  width: string;
+const DEFAULT_INFRA_ID = 'PAYMENT-INF';
+
+function formatAvailability(value: number) {
+  return `${value.toFixed(2)}%`;
 }
 
-const hostsColumns: ColumnDef[] = [
-  { label: 'Hostname', width: '22%' },
-  { label: 'Status', width: '10%' },
-  { label: 'CPU %', width: '12%' },
-  { label: 'Memory %', width: '12%' },
-  { label: 'Disk I/O', width: '12%' },
-  { label: 'Network', width: '12%' },
-  { label: 'OS', width: '10%' },
-  { label: 'Uptime', width: '10%' },
-];
-
-const containersColumns: ColumnDef[] = [
-  { label: 'Container', width: '20%' },
-  { label: 'Image', width: '20%' },
-  { label: 'Status', width: '10%' },
-  { label: 'CPU', width: '10%' },
-  { label: 'Memory', width: '10%' },
-  { label: 'Network I/O', width: '12%' },
-  { label: 'Restarts', width: '8%' },
-  { label: 'Created', width: '10%' },
-];
-
-const kubernetesColumns: ColumnDef[] = [
-  { label: 'Pod', width: '20%' },
-  { label: 'Namespace', width: '14%' },
-  { label: 'Status', width: '10%' },
-  { label: 'Node', width: '14%' },
-  { label: 'CPU Request', width: '10%' },
-  { label: 'Memory Request', width: '10%' },
-  { label: 'Restarts', width: '8%' },
-  { label: 'Age', width: '8%' },
-];
-
-const tabData: { label: string; columns: ColumnDef[] }[] = [
-  { label: 'Hosts', columns: hostsColumns },
-  { label: 'Containers', columns: containersColumns },
-  { label: 'Kubernetes', columns: kubernetesColumns },
-];
-
-/* ─── Placeholder status chips per tab ─── */
-const statusVariants: { label: string; color: 'success' | 'warning' | 'error' }[][] = [
-  // Hosts
-  [
-    { label: 'Running', color: 'success' },
-    { label: 'Running', color: 'success' },
-    { label: 'Warning', color: 'warning' },
-    { label: 'Running', color: 'success' },
-    { label: 'Critical', color: 'error' },
-  ],
-  // Containers
-  [
-    { label: 'Running', color: 'success' },
-    { label: 'Running', color: 'success' },
-    { label: 'Stopped', color: 'error' },
-    { label: 'Running', color: 'success' },
-    { label: 'Restarting', color: 'warning' },
-  ],
-  // Kubernetes
-  [
-    { label: 'Running', color: 'success' },
-    { label: 'Pending', color: 'warning' },
-    { label: 'Running', color: 'success' },
-    { label: 'Running', color: 'success' },
-    { label: 'CrashLoop', color: 'error' },
-  ],
-];
-
-const SKELETON_ROWS = 5;
+function formatMetric(value: number) {
+  return `${value.toFixed(0)}`;
+}
 
 export default function InfrastructurePage() {
   const theme = useTheme();
-  const [activeTab, setActiveTab] = useState(0);
+  const overviewQuery = useInfrastructureOverview(DEFAULT_INFRA_ID);
+  const { data, isLoading, isFetching, error, refetch } = overviewQuery;
 
   useEffect(() => {
     document.title = 'Infrastructure | Observability';
   }, []);
 
-  const columns = tabData[activeTab]!.columns;
-  const statuses = statusVariants[activeTab]!;
-  const statusColIndex = columns.findIndex((c) => c.label === 'Status');
+  if (isLoading) {
+    return <LoadingState label="Loading infrastructure overview…" variant="skeleton-cards" rows={4} />;
+  }
+
+  if (error || !data) {
+    return (
+      <ErrorState
+        title="Unable to load infrastructure overview"
+        message="We could not fetch infrastructure data for the selected identifier. Please try again."
+        onRetry={() => refetch()}
+      />
+    );
+  }
+
+  const { serviceName, health, availability, alerts, metrics, instances, lastUpdated } = data;
 
   return (
     <Box>
       <PageHeader
         icon={<DnsRoundedIcon />}
         title="Infrastructure"
-        subtitle="Monitor hosts, containers, and Kubernetes clusters"
+        subtitle={`Overview for ${serviceName}`}
+        actions={
+          <Chip
+            label={isFetching ? 'Refreshing…' : `Infra ID: ${DEFAULT_INFRA_ID}`}
+            variant="outlined"
+            size="small"
+            sx={{ fontWeight: 600 }}
+          />
+        }
       />
 
-      {/* ─── Tabs ─── */}
-      <Tabs
-        value={activeTab}
-        onChange={(_e, v: number) => setActiveTab(v)}
-        sx={{
-          mb: 2.5,
-          '& .MuiTab-root': {
-            textTransform: 'none',
-            fontWeight: 600,
-            minHeight: 42,
-          },
-        }}
-      >
-        {tabData.map((t) => (
-          <Tab key={t.label} label={t.label} />
-        ))}
-      </Tabs>
-
-      {/* ─── Table Card ─── */}
-      <Card
-        variant="outlined"
-        sx={{
-          borderColor: alpha(theme.palette.divider, 0.6),
-          overflow: 'hidden',
-        }}
-      >
-        <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
-          {/* Header row */}
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              px: 2.5,
-              py: 1.5,
-              backgroundColor: alpha(theme.palette.text.primary, 0.04),
-              borderBottom: `1px solid ${theme.palette.divider}`,
-            }}
-          >
-            {columns.map((col) => (
-              <Typography
-                key={col.label}
-                variant="caption"
-                sx={{
-                  width: col.width,
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                  color: 'text.secondary',
-                  fontSize: '0.7rem',
-                }}
-              >
-                {col.label}
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+          <Card variant="outlined">
+            <CardContent>
+              <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1 }}>
+                Health
               </Typography>
-            ))}
-          </Box>
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                {health}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
 
-          {/* Skeleton data rows */}
-          {Array.from({ length: SKELETON_ROWS }).map((_, rowIdx) => (
-            <Box
-              key={rowIdx}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                px: 2.5,
-                py: 1.5,
-                borderBottom:
-                  rowIdx < SKELETON_ROWS - 1
-                    ? `1px solid ${alpha(theme.palette.divider, 0.5)}`
-                    : 'none',
-                '&:hover': {
-                  backgroundColor: alpha(theme.palette.action.hover, 0.4),
-                },
-              }}
-            >
-              {columns.map((col, colIdx) => (
-                <Box key={col.label} sx={{ width: col.width, pr: 1 }}>
-                  {colIdx === statusColIndex ? (
-                    <Chip
-                      label={statuses[rowIdx]!.label}
-                      color={statuses[rowIdx]!.color}
-                      size="small"
-                      variant="outlined"
-                      sx={{ fontWeight: 600, fontSize: '0.72rem' }}
-                    />
-                  ) : (
-                    <Skeleton
-                      variant="text"
-                      width={`${55 + ((rowIdx * 7 + colIdx * 13) % 30)}%`}
-                      sx={{ fontSize: '0.85rem' }}
-                    />
-                  )}
+        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+          <Card variant="outlined">
+            <CardContent>
+              <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1 }}>
+                Availability
+              </Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                {formatAvailability(availability)}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+          <Card variant="outlined">
+            <CardContent>
+              <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1 }}>
+                Alerts
+              </Typography>
+              <Stack direction="row" spacing={1}>
+                <Chip label={`Critical: ${alerts.critical}`} color="error" size="small" />
+                <Chip label={`Warning: ${alerts.warning}`} color="warning" size="small" />
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Card variant="outlined">
+            <CardContent>
+              <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 2 }}>
+                Key metrics
+              </Typography>
+              <Grid container spacing={1}>
+                {['cpu', 'memory', 'disk', 'network', 'responseTime'].map((key) => (
+                  <Grid key={key} size={{ xs: 12, sm: 6 }}>
+                    <Card variant="outlined" sx={{ backgroundColor: alpha(theme.palette.background.paper, 0.98) }}>
+                      <CardContent sx={{ py: 1.5, px: 2 }}>
+                        <Typography variant="caption" sx={{ color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          {key === 'responseTime' ? 'Response Time' : key.toUpperCase()}
+                        </Typography>
+                        <Typography variant="h6" sx={{ fontWeight: 700, mt: 0.75 }}>
+                          {formatMetric(metrics[key] ?? 0)}{key === 'responseTime' ? ' ms' : '%'}
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                ))}
+              </Grid>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Card variant="outlined">
+            <CardContent>
+              <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 2 }}>
+                Last updated
+              </Typography>
+              <Typography variant="body1" sx={{ fontWeight: 700 }}>
+                {new Date(lastUpdated).toLocaleString()}
+              </Typography>
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1 }}>
+                Instance count
+              </Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                {instances.length}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      <Card variant="outlined">
+        <CardContent>
+          <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
+            Instances
+          </Typography>
+          {instances.length === 0 ? (
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              No instances were returned for this infrastructure.
+            </Typography>
+          ) : (
+            <Box sx={{ overflowX: 'auto' }}>
+              <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse' }}>
+                <Box component="thead" sx={{ display: 'table-header-group', backgroundColor: alpha(theme.palette.action.hover, 0.35) }}>
+                  <Box component="tr">
+                    {['Instance', 'Host', 'Status', 'CPU %', 'Memory %'].map((label) => (
+                      <Box
+                        component="th"
+                        key={label}
+                        sx={{
+                          textAlign: 'left',
+                          py: 1.5,
+                          px: 1.5,
+                          fontWeight: 700,
+                          color: 'text.secondary',
+                          fontSize: '0.75rem',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.05em',
+                        }}
+                      >
+                        {label}
+                      </Box>
+                    ))}
+                  </Box>
                 </Box>
-              ))}
+                <Box component="tbody">
+                  {instances.map((instance) => (
+                    <Box
+                      component="tr"
+                      key={instance.instanceId}
+                      sx={{ '&:not(:last-child) td': { borderBottom: `1px solid ${alpha(theme.palette.divider, 0.55)}` } }}
+                    >
+                      <Box component="td" sx={{ py: 1.5, px: 1.5 }}>{instance.instanceId}</Box>
+                      <Box component="td" sx={{ py: 1.5, px: 1.5 }}>{instance.host}</Box>
+                      <Box component="td" sx={{ py: 1.5, px: 1.5 }}>
+                        <Chip label={instance.status} size="small" color={instance.status === 'UP' ? 'success' : 'error'} />
+                      </Box>
+                      <Box component="td" sx={{ py: 1.5, px: 1.5 }}>{instance.cpu}%</Box>
+                      <Box component="td" sx={{ py: 1.5, px: 1.5 }}>{instance.memory}%</Box>
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
             </Box>
-          ))}
+          )}
         </CardContent>
       </Card>
     </Box>
