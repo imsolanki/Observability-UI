@@ -13,7 +13,14 @@ import DnsRoundedIcon from '@mui/icons-material/DnsRounded';
 import PageHeader from '../../components/common/PageHeader';
 import LoadingState from '../../components/common/LoadingState';
 import ErrorState from '../../components/common/ErrorState';
-import { useInfrastructureOverview } from '../../hooks/useInfrastructureData';
+import {
+  useInfrastructureCapabilities,
+  useInfrastructureComponents,
+  useInfrastructureConnectivity,
+  useInfrastructureOverview,
+  useInfrastructureStatus,
+  useInfrastructureTrends,
+} from '../../hooks/useInfrastructureData';
 
 const DEFAULT_INFRA_ID = 'PAYMENT-INF';
 
@@ -28,13 +35,27 @@ function formatMetric(value: number) {
 export default function InfrastructurePage() {
   const theme = useTheme();
   const overviewQuery = useInfrastructureOverview(DEFAULT_INFRA_ID);
-  const { data, isLoading, isFetching, error, refetch } = overviewQuery;
+  const componentsQuery = useInfrastructureComponents(DEFAULT_INFRA_ID);
+  const capabilitiesQuery = useInfrastructureCapabilities(DEFAULT_INFRA_ID);
+  const trendsQuery = useInfrastructureTrends(DEFAULT_INFRA_ID, 'cpu', '5m');
+  const statusQuery = useInfrastructureStatus(DEFAULT_INFRA_ID);
+  const connectivityQuery = useInfrastructureConnectivity(DEFAULT_INFRA_ID);
+
+  const {
+    data,
+    isLoading,
+    isFetching,
+    error,
+    refetch,
+  } = overviewQuery;
 
   useEffect(() => {
     document.title = 'Infrastructure | Observability';
   }, []);
 
-  if (isLoading) {
+  const isLoadingAny = isLoading || componentsQuery.isLoading || capabilitiesQuery.isLoading || trendsQuery.isLoading || statusQuery.isLoading || connectivityQuery.isLoading;
+
+  if (isLoadingAny) {
     return <LoadingState label="Loading infrastructure overview…" variant="skeleton-cards" rows={4} />;
   }
 
@@ -49,6 +70,11 @@ export default function InfrastructurePage() {
   }
 
   const { serviceName, health, availability, alerts, metrics, instances, lastUpdated } = data;
+  const components = componentsQuery.data ?? [];
+  const capabilities = capabilitiesQuery.data ?? [];
+  const trends = trendsQuery.data ?? [];
+  const status = statusQuery.data ?? {};
+  const connectivity = connectivityQuery.data ?? {};
 
   return (
     <Box>
@@ -156,62 +182,130 @@ export default function InfrastructurePage() {
         </Grid>
       </Grid>
 
-      <Card variant="outlined">
-        <CardContent>
-          <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
-            Instances
-          </Typography>
-          {instances.length === 0 ? (
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              No instances were returned for this infrastructure.
+      <Stack spacing={2}>
+        <Card variant="outlined">
+          <CardContent>
+            <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
+              Instances
             </Typography>
-          ) : (
-            <Box sx={{ overflowX: 'auto' }}>
-              <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse' }}>
-                <Box component="thead" sx={{ display: 'table-header-group', backgroundColor: alpha(theme.palette.action.hover, 0.35) }}>
-                  <Box component="tr">
-                    {['Instance', 'Host', 'Status', 'CPU %', 'Memory %'].map((label) => (
+            {instances.length === 0 ? (
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                No instances were returned for this infrastructure.
+              </Typography>
+            ) : (
+              <Box sx={{ overflowX: 'auto' }}>
+                <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <Box component="thead" sx={{ display: 'table-header-group', backgroundColor: alpha(theme.palette.action.hover, 0.35) }}>
+                    <Box component="tr">
+                      {['Instance', 'Host', 'Status', 'CPU %', 'Memory %'].map((label) => (
+                        <Box
+                          component="th"
+                          key={label}
+                          sx={{
+                            textAlign: 'left',
+                            py: 1.5,
+                            px: 1.5,
+                            fontWeight: 700,
+                            color: 'text.secondary',
+                            fontSize: '0.75rem',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
+                          }}
+                        >
+                          {label}
+                        </Box>
+                      ))}
+                    </Box>
+                  </Box>
+                  <Box component="tbody">
+                    {instances.map((instance) => (
                       <Box
-                        component="th"
-                        key={label}
-                        sx={{
-                          textAlign: 'left',
-                          py: 1.5,
-                          px: 1.5,
-                          fontWeight: 700,
-                          color: 'text.secondary',
-                          fontSize: '0.75rem',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.05em',
-                        }}
+                        component="tr"
+                        key={instance.instanceId}
+                        sx={{ '&:not(:last-child) td': { borderBottom: `1px solid ${alpha(theme.palette.divider, 0.55)}` } }}
                       >
-                        {label}
+                        <Box component="td" sx={{ py: 1.5, px: 1.5 }}>{instance.instanceId}</Box>
+                        <Box component="td" sx={{ py: 1.5, px: 1.5 }}>{instance.host}</Box>
+                        <Box component="td" sx={{ py: 1.5, px: 1.5 }}>
+                          <Chip label={instance.status} size="small" color={instance.status === 'UP' ? 'success' : 'error'} />
+                        </Box>
+                        <Box component="td" sx={{ py: 1.5, px: 1.5 }}>{instance.cpu}%</Box>
+                        <Box component="td" sx={{ py: 1.5, px: 1.5 }}>{instance.memory}%</Box>
                       </Box>
                     ))}
                   </Box>
                 </Box>
-                <Box component="tbody">
-                  {instances.map((instance) => (
-                    <Box
-                      component="tr"
-                      key={instance.instanceId}
-                      sx={{ '&:not(:last-child) td': { borderBottom: `1px solid ${alpha(theme.palette.divider, 0.55)}` } }}
-                    >
-                      <Box component="td" sx={{ py: 1.5, px: 1.5 }}>{instance.instanceId}</Box>
-                      <Box component="td" sx={{ py: 1.5, px: 1.5 }}>{instance.host}</Box>
-                      <Box component="td" sx={{ py: 1.5, px: 1.5 }}>
-                        <Chip label={instance.status} size="small" color={instance.status === 'UP' ? 'success' : 'error'} />
-                      </Box>
-                      <Box component="td" sx={{ py: 1.5, px: 1.5 }}>{instance.cpu}%</Box>
-                      <Box component="td" sx={{ py: 1.5, px: 1.5 }}>{instance.memory}%</Box>
-                    </Box>
-                  ))}
-                </Box>
               </Box>
-            </Box>
-          )}
-        </CardContent>
-      </Card>
+            )}
+          </CardContent>
+        </Card>
+
+        <Grid container spacing={2}>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <Card variant="outlined">
+              <CardContent>
+                <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1 }}>
+                  Components
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  {components.length > 0 ? `${components.length} monitored component(s)` : 'No component data returned'}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <Card variant="outlined">
+              <CardContent>
+                <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1 }}>
+                  Capabilities
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  {capabilities.length > 0 ? `${capabilities.length} capability group(s)` : 'No capability data returned'}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <Card variant="outlined">
+              <CardContent>
+                <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1 }}>
+                  Trend points
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  {trends.length > 0 ? `${trends.length} data point(s)` : 'No trend data returned'}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+
+        <Grid container spacing={2}>
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Card variant="outlined">
+              <CardContent>
+                <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1 }}>
+                  Status
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  {status && typeof status === 'object' ? JSON.stringify(status) : 'No status payload returned'}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Card variant="outlined">
+              <CardContent>
+                <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1 }}>
+                  Connectivity
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  {connectivity && typeof connectivity === 'object' ? JSON.stringify(connectivity) : 'No connectivity payload returned'}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+      </Stack>
     </Box>
   );
 }
