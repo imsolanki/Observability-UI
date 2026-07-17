@@ -1,0 +1,153 @@
+
+openapi: 3.0.3
+info:
+  title: Infrastructure Monitoring API
+  version: 2.0.0
+  description: |
+    Grafana-style Infrastructure Monitoring APIs.
+
+paths:
+  /infrastructure/{infraId}/overview:
+    get:
+      summary: Dashboard Overview
+      description: Returns all dashboard information for an application including aggregated health, metrics and running instances.
+      parameters:
+        - in: path
+          name: infraId
+          required: true
+          schema: {type: string}
+          description: Unique Infrastructure/Application identifier.
+      responses:
+        '200':
+          description: Dashboard overview.
+          content:
+            application/json:
+              example:
+                infrastructureId: PAYMENT-INF
+                serviceName: Payment Service
+                health: Healthy
+                availability: 99.95
+                alerts:
+                  critical: 1
+                  warning: 2
+                metrics:
+                  cpu: 58
+                  memory: 67
+                  disk: 71
+                  network: 42
+                  responseTime: 145
+                instances:
+                  - instanceId: INST-01
+                    host: 10.0.0.11
+                    status: UP
+                    cpu: 61
+                    memory: 72
+                  - instanceId: INST-02
+                    host: 10.0.0.12
+                    status: UP
+                    cpu: 55
+                    memory: 63
+                lastUpdated: "2026-07-13T18:45:00Z"
+
+  /infrastructure/{infraId}/components:
+    get:
+      summary: Component Details
+      description: Returns every monitored component belonging to the application.
+      responses:
+        '200':
+          description: List of monitored components.
+
+  /infrastructure/{infraId}/capabilities:
+    get:
+      summary: Infrastructure Capabilities
+      description: Returns monitored capabilities grouped by component.
+      responses:
+        '200':
+          description: Component capability list.
+
+  /infrastructure/{infraId}/trends:
+    get:
+      summary: Aggregated Trend Data
+      description: Returns aggregated time-series across all running instances.
+      parameters:
+        - in: query
+          name: metric
+          schema:
+            type: string
+            enum: [cpu,memory,disk,network,responseTime,errorRate,availability]
+          description: Metric to plot.
+        - in: query
+          name: interval
+          schema:
+            type: string
+            example: 5m
+      responses:
+        '200':
+          description: Trend points.
+
+  /infrastructure/search:
+    get:
+      summary: Search Infrastructure
+      description: Search by service name and active infrastructure.
+      parameters:
+        - in: query
+          name: serviceName
+          schema: {type: string}
+          description: Service/Application name.
+        - in: query
+          name: activeInfra
+          schema: {type: boolean}
+          description: Only active infrastructures.
+        - in: query
+          name: environment
+          schema: {type: string}
+        - in: query
+          name: page
+          schema: {type: integer}
+        - in: query
+          name: size
+          schema: {type: integer}
+      responses:
+        '200':
+          description: Matching infrastructures.
+
+  /infrastructure/{infraId}/status:
+    get:
+      summary: Infrastructure Status
+      description: Returns current operational status.
+
+  /infrastructure/{infraId}/connectivity:
+    get:
+      summary: Connectivity Details
+      description: Returns downstream and upstream connectivity status.
+    post:
+      summary: Validate Connectivity
+      description: Trigger connectivity validation.
+
+components:
+  schemas:
+    Overview:
+      type: object
+      properties:
+        infrastructureId:
+          type: string
+          description: Unique identifier of the monitored application.
+        serviceName:
+          type: string
+          description: Business service/application name.
+        health:
+          type: string
+          description: Overall aggregated health.
+        metrics:
+          type: object
+          description: Aggregated metrics across all running instances.
+        instances:
+          type: array
+          description: All running instances of the application.
+        alerts:
+          type: object
+          description: Alert counts grouped by severity.
+        lastUpdated:
+          type: string
+          format: date-time
+          description: Last metrics refresh timestamp.
